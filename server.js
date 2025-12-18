@@ -1,7 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://xzzaoniuzvcxqfugvfzh.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6emFvbml1enZjeHFmdWd2ZnpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDczMTYsImV4cCI6MjA4MTYyMzMxNn0.i9l_HJJgCR7_uqbjibE65D8Qk9N0nFSGIvGAt9m78QY'; // Используй service_role!
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6emFvbml1enZjeHFmdWd2ZnpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDczMTYsImV4cCI6MjA4MTYyMzMxNn0.i9l_HJJgCR7_uqbjibE65D8Qk9N0nFSGIvGAt9m78QY';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const WAITING_TIME = 15000; 
@@ -25,7 +25,7 @@ async function gameLoop() {
         await sb.from('rocket_state').update({
             status: 'waiting',
             multiplier: 1.0,
-            start_time: roundId // Метка начала отсчета 15 сек
+            start_time: roundId
         }).eq('id', 1);
 
         await new Promise(r => setTimeout(r, WAITING_TIME));
@@ -37,22 +37,22 @@ async function gameLoop() {
         await sb.from('rocket_state').update({
             status: 'flying',
             crash_point: crashPoint,
-            start_time: flightStart, // Метка начала полета
+            start_time: flightStart,
             multiplier: 1.0
         }).eq('id', 1);
 
-        let currentMult = 1.0;
-        while (currentMult < crashPoint) {
-            await new Promise(r => setTimeout(r, 500)); // Обновляем базу редко
+        let currentMultiplier = 1.0;
+        while (currentMultiplier < crashPoint) {
+            await new Promise(r => setTimeout(r, 600));
             const elapsed = (Date.now() - flightStart) / 1000;
-            currentMult = Math.pow(1.15, elapsed);
-            
-            if (currentMult >= crashPoint) break;
-            
-            await sb.from('rocket_state').update({ multiplier: currentMult }).eq('id', 1);
+            currentMultiplier = Math.pow(1.15, elapsed);
+            if (currentMultiplier >= crashPoint) break;
+            await sb.from('rocket_state').update({ multiplier: currentMultiplier }).eq('id', 1);
         }
 
-        // 3. КРАШ
+        // 3. КРАШ (Мгновенно помечаем всё как LOST)
+        await sb.from('rocket_bets').update({ status: 'lost' }).eq('status', 'active');
+
         const { data } = await sb.from('rocket_state').select('history').eq('id', 1).single();
         let history = data.history || [];
         history.push(parseFloat(crashPoint.toFixed(2)));
@@ -63,10 +63,10 @@ async function gameLoop() {
             multiplier: crashPoint,
             history: history
         }).eq('id', 1);
-
-        await sb.from('rocket_bets').update({ status: 'lost' }).eq('status', 'active');
+        
         await new Promise(r => setTimeout(r, CRASH_PAUSE));
     }
 }
 
-gameLoop();
+gameLoop().catch(e => console.error(e));
+
